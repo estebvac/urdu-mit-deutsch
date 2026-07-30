@@ -1,12 +1,16 @@
-name: Bootstrap Android 16 APK
+name: Bootstrap and test Android 16 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-smoke-test:
@@ -14,25 +18,27 @@ jobs:
     timeout-minutes: 50
 
     steps:
-      - name: Check out bootstrap repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Expand Android project
+      - name: Expand Android source into repository
         shell: bash
         run: |
           set -euo pipefail
-          unzip -o UrduMitDeutsch-source-v0.2.1-github-ready.zip -d .
-          rm UrduMitDeutsch-source-v0.2.1-github-ready.zip
-
-      - name: Commit expanded source
-        shell: bash
-        run: |
-          set -euo pipefail
+          ARCHIVE=UrduMitDeutsch-source-v0.2.1-github-ready.zip
+          test -s "$ARCHIVE"
+          TEMP_DIR="$(mktemp -d)"
+          unzip -q "$ARCHIVE" -d "$TEMP_DIR"
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/workflows/' \
+            "$TEMP_DIR/" ./
+          rm -f "$ARCHIVE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "Expand Android project source"
+            git commit -m "Populate Android source project"
             git push origin HEAD:main
           fi
 
@@ -49,10 +55,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
+          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager \
             "platforms;android-36" \
-            "build-tools;35.0.0" \
+            "build-tools;36.0.0" \
             "platform-tools"
 
       - name: Set up Gradle 8.13
@@ -60,16 +66,34 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Run unit tests and build APK
-        run: gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
-
-      - name: Verify APK
+      - name: Run tests and build APK
         shell: bash
         run: |
           set -euo pipefail
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app-debug.apk.sha256
+          gradle --version
+          gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
+
+      - name: Verify and upload APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          sha256sum "$APK" | tee app-debug.apk.sha256
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep -q "package: name='com.estebvac.urdudeutsch'" apk-badging.txt
+          grep -q "targetSdkVersion:'36'" apk-badging.txt
+
+      - name: Upload built APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: UrduMitDeutsch-debug-apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app-debug.apk.sha256
+            apk-badging.txt
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Enable KVM
         shell: bash
@@ -78,14 +102,16 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Select Pixel hardware profile
+      - name: Select available Pixel profile
         id: avd-profile
         shell: bash
         run: |
           if avdmanager list device | grep -q 'pixel_9_pro'; then
             echo "profile=pixel_9_pro" >> "$GITHUB_OUTPUT"
-          else
+          elif avdmanager list device | grep -q 'pixel_7_pro'; then
             echo "profile=pixel_7_pro" >> "$GITHUB_OUTPUT"
+          else
+            echo "profile=pixel_2" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Launch on Android 16 emulator
@@ -107,7 +133,7 @@ jobs:
             adb logcat -c
             adb shell am start -W -n "$ACTIVITY" | tee launch-result.txt
             grep -q "Status: ok" launch-result.txt
-            sleep 4
+            sleep 5
             adb shell pidof "$PACKAGE" | tee app-pid.txt
             test -s app-pid.txt
             adb shell dumpsys activity activities > activity-state.txt
@@ -119,16 +145,16 @@ jobs:
               exit 1
             fi
 
-      - name: Upload tested APK
+      - name: Upload smoke-test evidence
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: UrduMitDeutsch-Android16-tested
+          name: UrduMitDeutsch-Android16-smoke-test
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app-debug.apk.sha256
             android16-launch.png
             launch-result.txt
+            app-pid.txt
             activity-state.txt
             android16-logcat.txt
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
