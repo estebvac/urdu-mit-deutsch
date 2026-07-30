@@ -167,3 +167,29 @@ jobs:
               --notes "Offline Urdu A0 learning app with German explanations. Built with API 36, verified for minSdk 34 and targetSdk 36, and installed and cold-launched successfully on an Android 16 Pixel emulator." \
               --latest
           fi
+
+      - name: Record published release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_SHA256=$(cut -d ' ' -f1 UrduMitDeutsch-v0.2.0.apk.sha256)
+          mkdir -p release
+          cat > release/v0.2.0.json <<EOF
+          {
+            "version": "0.2.0",
+            "tag": "v0.2.0",
+            "source_commit": "$GITHUB_SHA",
+            "apk": "https://github.com/estebvac/urdu-mit-deutsch/releases/latest/download/UrduMitDeutsch-v0.2.0.apk",
+            "sha256": "$APK_SHA256",
+            "screenshot": "https://github.com/estebvac/urdu-mit-deutsch/releases/latest/download/android16-launch.png",
+            "validated_on": "Android 16 / API 36 emulator"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/v0.2.0.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record v0.2.0 release [skip ci]"
+            git push origin HEAD:main
+          fi
