@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Urdu mit Deutsch</string>
+    <string name="tts_unavailable">Keine Urdu-Sprachausgabe auf diesem Gerät installiert.</string>
+</resources>
