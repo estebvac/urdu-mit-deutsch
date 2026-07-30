@@ -7,7 +7,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-${{ github.ref }}
@@ -63,6 +63,7 @@ jobs:
           sha256sum "$APK" | tee app-debug.apk.sha256
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
           grep -q "package: name='com.estebvac.urdudeutsch'" apk-badging.txt
+          grep -q "sdkVersion:'34'" apk-badging.txt
           grep -q "targetSdkVersion:'36'" apk-badging.txt
 
       - name: Upload built APK
@@ -132,3 +133,37 @@ jobs:
             android16-logcat.txt
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Prepare release assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp app/build/outputs/apk/debug/app-debug.apk UrduMitDeutsch-v0.2.0.apk
+          sha256sum UrduMitDeutsch-v0.2.0.apk > UrduMitDeutsch-v0.2.0.apk.sha256
+          test -s android16-launch.png
+
+      - name: Publish tested GitHub release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=v0.2.0
+          ASSETS=(
+            UrduMitDeutsch-v0.2.0.apk
+            UrduMitDeutsch-v0.2.0.apk.sha256
+            android16-launch.png
+          )
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --latest
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "Urdu mit Deutsch v0.2.0" \
+              --notes "Offline Urdu A0 learning app with German explanations. Built with API 36, verified for minSdk 34 and targetSdk 36, and installed and cold-launched successfully on an Android 16 Pixel emulator." \
+              --latest
+          fi
