@@ -105,26 +105,19 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: |
-            set -euo pipefail
-            PACKAGE=com.estebvac.urdudeutsch
-            ACTIVITY=$PACKAGE/.MainActivity
-            APK=app/build/outputs/apk/debug/app-debug.apk
-            adb install -r "$APK"
-            adb shell am force-stop "$PACKAGE"
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.estebvac.urdudeutsch
             adb logcat -c
-            adb shell am start -W -n "$ACTIVITY" | tee launch-result.txt
+            adb shell am start -W -n com.estebvac.urdudeutsch/.MainActivity | tee launch-result.txt
             grep -q "Status: ok" launch-result.txt
             sleep 5
-            adb shell pidof "$PACKAGE" | tee app-pid.txt
+            adb shell pidof com.estebvac.urdudeutsch | tee app-pid.txt
             test -s app-pid.txt
             adb shell dumpsys activity activities > activity-state.txt
-            grep -q "$PACKAGE/.MainActivity" activity-state.txt
+            grep -q "com.estebvac.urdudeutsch/.MainActivity" activity-state.txt
             adb exec-out screencap -p > android16-launch.png
             adb logcat -d -v threadtime > android16-logcat.txt
-            if grep -A 30 -B 5 -E "FATAL EXCEPTION|Process: $PACKAGE" android16-logcat.txt | grep -q "$PACKAGE"; then
-              echo "Application crash detected"
-              exit 1
-            fi
+            ! grep -A 30 -B 5 -E "FATAL EXCEPTION|Process: com.estebvac.urdudeutsch" android16-logcat.txt | grep -q "com.estebvac.urdudeutsch"
 
       - name: Upload Android 16 smoke-test evidence
         if: ${{ !cancelled() }}
