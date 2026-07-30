@@ -1,12 +1,13 @@
-name: Bootstrap and test Android 16 APK
+name: Android 16 APK
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -18,29 +19,8 @@ jobs:
     timeout-minutes: 50
 
     steps:
-      - name: Check out repository
+      - name: Check out source
         uses: actions/checkout@v4
-
-      - name: Expand Android source into repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          ARCHIVE=UrduMitDeutsch-source-v0.2.1-github-ready.zip
-          test -s "$ARCHIVE"
-          TEMP_DIR="$(mktemp -d)"
-          unzip -q "$ARCHIVE" -d "$TEMP_DIR"
-          rsync -a --delete \
-            --exclude='.git/' \
-            --exclude='.github/workflows/' \
-            "$TEMP_DIR/" ./
-          rm -f "$ARCHIVE"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Populate Android source project"
-            git push origin HEAD:main
-          fi
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -66,19 +46,20 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Run tests and build APK
+      - name: Run unit tests and build APK
         shell: bash
         run: |
           set -euo pipefail
           gradle --version
           gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
 
-      - name: Verify and upload APK
+      - name: Verify APK
         shell: bash
         run: |
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
+          ls -lh "$APK"
           sha256sum "$APK" | tee app-debug.apk.sha256
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
           grep -q "package: name='com.estebvac.urdudeutsch'" apk-badging.txt
@@ -145,7 +126,7 @@ jobs:
               exit 1
             fi
 
-      - name: Upload smoke-test evidence
+      - name: Upload Android 16 smoke-test evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
