@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0",
+  "tag": "v0.2.0",
+  "source_commit": "a2d52d4ab275cd8f333d4c9056bd315bdf5ad1ba",
+  "apk": "https://github.com/estebvac/urdu-mit-deutsch/releases/latest/download/UrduMitDeutsch-v0.2.0.apk",
+  "sha256": "f6d81426f5d81e65bf524786d6fe8723ae973917b926316fcb89a976cc67c59e",
+  "screenshot": "https://github.com/estebvac/urdu-mit-deutsch/releases/latest/download/android16-launch.png",
+  "validated_on": "Android 16 / API 36 emulator"
+}
